@@ -1,0 +1,26 @@
+server:
+  port: 8888
+jwt:
+  # Paste chính xác chuỗi secret key dạng Base64 đã dùng ở identity-service vào đây
+  secret-key: "Thay_The_Bang_Chuoi_Secret_Key_Base64_Cua_Ban_O_Day_Giong_Het_Identity_Service"
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      routes:
+        - id: identity-service-route
+          uri: http://localhost:8080
+          predicates:
+            - Path=/identity/**
+          filters:
+            - StripPrefix=1
+            - AuthenticationFilter
+
+        - id: product-service-route
+          uri: http://localhost:8080
+          predicates:
+            - Path=/products/**
+          filters:
+            - StripPrefix=1
+            - AuthenticationFilter

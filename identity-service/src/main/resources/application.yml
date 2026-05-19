@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: identity-service
+  datasource:
+    # URL kết nối tới database identity_db (chỉnh sửa lại host/port nếu db nằm ở server khác)
+    url: jdbc:postgresql://localhost:5432/identity_db
+    username: postgres
+    password: kimquan1
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    # Hiển thị câu lệnh SQL trên console để tiện debug logic
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        # Dialect cho PostgreSQL
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+    # Cấu hình tự động tạo bảng (update/create/create-drop/validate/none)
+    # Lưu ý: Trên môi trường production nên để là 'validate' hoặc 'none'
+    hibernate:
+      ddl-auto: update
+server:
+  port: 8888 # Port chạy service này
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: http://localhost:8761/eureka/ # Trỏ tới địa chỉ của Eureka Server
+
+jwt:
+  secret-key: daylachuoibimatcuahunghxcotoithieu64kitughgdagsgdashkdgkasjbfjkadbhdbhbvhsbvdshvbhdsbvhdb
+  expired: 86400000
