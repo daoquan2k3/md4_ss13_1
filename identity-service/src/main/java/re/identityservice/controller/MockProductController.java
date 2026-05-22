@@ -2,16 +2,21 @@ package re.identityservice.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/products")
 public class MockProductController {
+
+    private static final List<String> products = new ArrayList<>(List.of("Màn hình ASUS", "Bàn phím cơ", "Chuột Logitech"));
+
     @GetMapping
-    public ResponseEntity<List<String>> getMockProducts() {
-        return ResponseEntity.ok(List.of("Bánh mì", "Sữa tươi", "Cà phê gói"));
+    public ResponseEntity<List<String>> getAllProducts() {
+        return ResponseEntity.ok(products);
     }
 
     @PostMapping
@@ -26,5 +31,15 @@ public class MockProductController {
         }
 
         return ResponseEntity.ok(String.format("User [%s] với quyền [%s] đã tạo sản phẩm thành công!", userId, userRole));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<String> deleteProduct(@PathVariable int id) {
+        if (id >= products.size() || id < 0) {
+            return ResponseEntity.badRequest().body("Sản phẩm không tồn tại!");
+        }
+        String removed = products.remove(id);
+        return ResponseEntity.ok("Xóa thành công sản phẩm: " + removed);
     }
 }

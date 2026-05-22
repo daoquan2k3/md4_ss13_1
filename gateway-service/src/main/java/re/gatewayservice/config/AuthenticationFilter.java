@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate; // Thư viện Reactive
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -27,10 +28,13 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
     @Value("${jwt.secret-key}")
     private String secretKey;
 
+    // Tiêm phụ thuộc qua Constructor để xử lý triệt để lỗi "might not have been initialized"
+    private final ReactiveStringRedisTemplate redisTemplate;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
-    public AuthenticationFilter() {
+    public AuthenticationFilter(ReactiveStringRedisTemplate redisTemplate) {
         super(Config.class);
+        this.redisTemplate = redisTemplate;
     }
 
     public static class Config {
@@ -42,9 +46,17 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
             ServerHttpRequest request = exchange.getRequest();
             String path = request.getURI().getPath();
 
+            // Loại trừ luồng auth (Đăng nhập/Đăng ký không cần check Token)
             if (pathMatcher.match("/identity/api/auth/**", path)) {
                 return chain.filter(exchange);
             }
+
+            // Chống giả mạo Header từ bên ngoài môi trường internet
+            ServerHttpRequest.Builder requestBuilder = request.mutate();
+            requestBuilder.headers(headers -> {
+                headers.remove("X-User-Id");
+                headers.remove("X-User-Role");
+            });
 
             if (!request.getHeaders().containsHeader(HttpHeaders.AUTHORIZATION)) {
                 return onError(exchange, "Thiếu Header Authorization trong yêu cầu!", HttpStatus.UNAUTHORIZED);
@@ -61,24 +73,31 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
                 byte[] keyBytes = Decoders.BASE64.decode(secretKey);
                 SecretKey key = Keys.hmacShaKeyFor(keyBytes);
 
-                // 1. Giải mã và thu về đối tượng Claims
                 Jws<Claims> claimsJws = Jwts.parser()
                         .verifyWith(key)
                         .build()
                         .parseSignedClaims(token);
 
                 Claims claims = claimsJws.getPayload();
+                String jti = claims.getId();
                 String username = claims.getSubject();
                 String role = claims.get("role", String.class);
 
-                // 2. Bảo mật toàn vẹn: Tạo bản sao request mới (mutate) mang Header tùy chỉnh
-                ServerHttpRequest mutatedRequest = request.mutate()
-                        .header("X-User-Id", username)
-                        .header("X-User-Role", role)
-                        .build();
+                String redisKey = "blacklist:" + jti;
 
-                // 3. Đưa request đã mutate vào exchange để chuyển tiếp xuống downstream service
-                return chain.filter(exchange.mutate().request(mutatedRequest).build());
+                return redisTemplate.hasKey(redisKey)
+                        .flatMap(isBlacklisted -> {
+                            if (Boolean.TRUE.equals(isBlacklisted)) {
+                                return onError(exchange, "Token đã hết hiệu lực do người dùng đăng xuất!", HttpStatus.UNAUTHORIZED);
+                            }
+
+                            ServerHttpRequest mutatedRequest = requestBuilder
+                                    .header("X-User-Id", username)
+                                    .header("X-User-Role", role)
+                                    .build();
+
+                            return chain.filter(exchange.mutate().request(mutatedRequest).build());
+                        });
 
             } catch (SignatureException e) {
                 return onError(exchange, "Chữ ký Token không hợp lệ!", HttpStatus.UNAUTHORIZED);
@@ -87,12 +106,12 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
             } catch (MalformedJwtException | IllegalArgumentException e) {
                 return onError(exchange, "Cấu trúc Token không hợp lệ!", HttpStatus.UNAUTHORIZED);
             } catch (Exception e) {
-                return onError(exchange, "Lỗi xác thực Token hệ thống!", HttpStatus.UNAUTHORIZED);
+                return onError(exchange, "Lỗi hệ thống trong quá trình kiểm tra Token!", HttpStatus.UNAUTHORIZED);
             }
         };
     }
 
-    // SỬA: Thay thế viết trực tiếp package thành class đã import ngắn gọn
+    // Hàm bổ trợ đóng gói luồng phản hồi dữ liệu lỗi dạng JSON về phía Client
     private Mono<Void> onError(ServerWebExchange exchange, String errorMessage, HttpStatus status) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(status);

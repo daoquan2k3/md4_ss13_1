@@ -1,4 +1,8 @@
 spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
   application:
     name: identity-service
   datasource:
@@ -16,9 +20,6 @@ spring:
         format_sql: true
         # Dialect cho PostgreSQL
         dialect: org.hibernate.dialect.PostgreSQLDialect
-
-    # Cấu hình tự động tạo bảng (update/create/create-drop/validate/none)
-    # Lưu ý: Trên môi trường production nên để là 'validate' hoặc 'none'
     hibernate:
       ddl-auto: update
 server:
@@ -29,8 +30,10 @@ eureka:
     register-with-eureka: true
     fetch-registry: true
     service-url:
-      defaultZone: http://localhost:8761/eureka/ # Trỏ tới địa chỉ của Eureka Server
+      defaultZone: http://localhost:8761/eureka/
 
-jwt:
-  secret-key: daylachuoibimatcuahunghxcotoithieu64kitughgdagsgdashkdgkasjbfjkadbhdbhbvhsbvdshvbhdsbvhdb
-  expired: 86400000
+app:
+  jwt:
+    secret: "vS6K5vH8N2zB4xR9mQ3pL1wT7yC5vH8N2zB4xR9mQ3pL1wT7yC5vH8N2z"
+    access-token-expiration: 900000
+    refresh-token-expiration: 604800000
